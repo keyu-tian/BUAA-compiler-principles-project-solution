@@ -1,0 +1,7 @@
+[jobs.c0]
+
+image = { source = "dockerfile", path = ".", tag = "c0-py" }
+
+run = [
+    "python c0_main.py -i $input -o $asm",
+]
