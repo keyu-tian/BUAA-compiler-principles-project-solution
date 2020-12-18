@@ -1,4 +1,6 @@
 FROM python:3
-# RUN pip install xxx yyy zzz -i https://pypi.tuna.tsinghua.edu.cn/simple
 WORKDIR /app/
-COPY src /app/
+COPY src requirements.txt /app/
+RUN ls -l
+RUN pip install -r requirements.txt
+RUN echo "Kevin's here!"
