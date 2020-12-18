@@ -1,8 +1,9 @@
+import logging
+from pprint import pformat
 from typing import List
 
-
 from lexical.chr import is_identifier, str_literal_reg, dbl_literal_reg, chr_literal_reg, is_decimal
-from lexical.err import UnknownTokenErr
+from lexical.lex_err import UnknownTokenErr
 from lexical.tokentype import Token, TokenType, STR_TO_TOKEN_TYPE, STR_LITERAL_REFERENCE, DBL_LITERAL_REFERENCE, SPREADING_OPERANDS, SHRINKING_OPERANDS
 from meta import F_ENCODING
 
@@ -33,7 +34,8 @@ class LexicalTokenizer(object):
     
     """
     
-    def __init__(self, raw_inputs: List[str]):
+    def __init__(self, lg: logging.Logger, raw_inputs: List[str]):
+        self.lg = lg
         lines = map(lambda s: s.split('//')[0].strip(), raw_inputs)
         codes = '\n'.join(filter(len, lines))
         
@@ -42,6 +44,7 @@ class LexicalTokenizer(object):
         
         for k, v in [*SPREADING_OPERANDS.items(), *SHRINKING_OPERANDS.items()]:
             codes = codes.replace(k, v)
+        self.lg.info(f'codes after pre-processing:\n{codes}@EOF')
         self.words = codes.split()
     
     def __extract_str_dbl_chr_literals(self, codes):
@@ -69,29 +72,5 @@ class LexicalTokenizer(object):
                 tokens.append(Token(token_type=TokenType.DBL_LITERAL, val=self.dbl_literals[int(w[1:])]))
             else:                                   # parsing failed
                 raise UnknownTokenErr(f'"{w}"')
+        self.lg.info(f'parsed tokens:\n{pformat(tokens)}')
         return tokens
-
-
-if __name__ == '__main__':
-    from pprint import pprint as pp
-    
-    pp(
-        LexicalTokenizer(
-            """
-fn main()->void{
-    let _x_1:int='1'+'\\n'-1.3+1.0e3-1.0E-3-3 as int;
-    if x==0{}
-    if x!=0{}
-    if x>=0{}
-    if x>0{}
-    if x<=0{}
-    if x<0{}
-    putstr("aew");
-    putstr("a'a'e1.3 1.3E-3w\\n");
-    putstr("\\n");
-    while x<=0 {break; continue;}
-}
-
-""".splitlines()
-        ).parse_tokens()
-    )

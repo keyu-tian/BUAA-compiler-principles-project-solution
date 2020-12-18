@@ -1,7 +1,4 @@
 import re
-from typing import Optional
-
-from meta import F_ENCODING
 
 str_literal_reg = re.compile(r'\"([^\"\\]|\\[\\\"\'nrt])*\"')
 dbl_literal_reg = re.compile(r'\d+\.\d+[eE][+-]?\d+|\d+\.\d+')
@@ -17,19 +14,7 @@ def is_al_udl(s: str) -> bool:
 
 
 def is_decimal(s: str) -> bool:
-    return all(
-        ord('0') <= ord(ch) <= ord('9')
-        for ch in s
-    )
-
-
-def is_alnum(s: str) -> bool:
-    return all(
-        ord('a') <= ord(ch) <= ord('z')
-        or ord('A') <= ord(ch) <= ord('Z')
-        or ord('0') <= ord(ch) <= ord('9')
-        for ch in s
-    )
+    return all(ord('0') <= ord(ch) <= ord('9') for ch in s)
 
 
 def is_al_num_udl(s: str) -> bool:
