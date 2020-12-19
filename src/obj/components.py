@@ -2,4 +2,8 @@
 # This file is a part of my compiler assignment for Compilation Principles.
 # All rights reserved.
 
-FS_ENCODING = 'utf-8'
+class C0ELF:
+    
+    def __init__(self):
+        self.magic_num, self.version = 0x72303b3e, 0x1
+        self.g_vars, self.g_fns = [], []

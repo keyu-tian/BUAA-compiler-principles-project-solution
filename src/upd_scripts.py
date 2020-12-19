@@ -1,3 +1,7 @@
+# Copyright (C) 2020, Keyu Tian, Beihang University.
+# This file is a part of my compiler assignment for Compilation Principles.
+# All rights reserved.
+
 import os
 
 
@@ -14,10 +18,7 @@ def dfs_scripts(cwd, upd_fn):
 
 if __name__ == '__main__':
     
-    cp = """# Copyright (C) 2020, Keyu Tian, Beihang University.
-# This file is a part of my compiler assignment for Compilation Principles.
-# All rights reserved.
-
+    cp = """
 """
     
     def upd(path):
@@ -25,6 +26,6 @@ if __name__ == '__main__':
             ctt = fp.read()
         if not ctt.startswith(cp):
             with open(path, 'w', encoding='utf-8') as fp:
-                fp.write(cp + ctt)
+                fp.write(cp + ctt.replace(cp[:-1], ''))
     
     dfs_scripts(os.getcwd(), upd)

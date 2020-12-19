@@ -1,3 +1,0 @@
-class AbstractSyntaxTree(object):
-    def __init__(self):
-        ...

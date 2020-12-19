@@ -1,11 +1,14 @@
+# Copyright (C) 2020, Keyu Tian, Beihang University.
+# This file is a part of my compiler assignment for Compilation Principles.
+# All rights reserved.
+
 import logging
 from pprint import pformat
-from typing import List
+from typing import List, Optional, Tuple
 
-from lexical.chr import is_identifier, str_literal_reg, dbl_literal_reg, chr_literal_reg, is_decimal
 from lexical.lex_err import UnknownTokenErr
-from lexical.tokentype import Token, TokenType, STR_TO_TOKEN_TYPE, STR_LITERAL_REFERENCE, DBL_LITERAL_REFERENCE, SPREADING_OPERANDS, SHRINKING_OPERANDS
-from meta import F_ENCODING
+from lexical.str_utils import is_identifier, is_decimal, remove_inline_comment, extract_str_dbl_chr_literals, STR_LITERAL_REFERENCE, DBL_LITERAL_REFERENCE
+from lexical.tokentype import Token, TokenType, STR_TO_TOKEN_TYPE, SPREADING_OPERANDS, SHRINKING_OPERANDS
 
 
 class LexicalTokenizer(object):
@@ -14,51 +17,36 @@ class LexicalTokenizer(object):
     
     Methods:
     
-        __init__:
-            Construct the tokenizer and performs pre-preparation
-            for the later lexical analysis, including:
+        parse_tokens_from_raw_input:
+            Parses all tokens from the separated words
+        
+        __pre_process:
+            Performs pre-processing for the later lexical analysis, including:
         
             * Comments removing.
             * Literals extracting.
             * Words splitting.
-        
-        parse_tokens:
-            Parse all tokens from the separated words.
+    
+        __extract_str_dbl_chr_literals:
+            Extracts string, double and character literals, converting them to references or integer values.
     
     Examples:
     
-        >>> lex = LexicalTokenizer('fn main() -> void {\n    let x: int = 2;\n    putint(x);\n}\n'.splitlines())
+        >>> lex = LexicalTokenizer(lg=None, raw_input=raw_input)
+        >>> raw_input = 'fn main() -> void {\n    let x: int = 2;\n    putint(x);\n}\n'
         >>> tokens = lex.parse_tokens()
         >>> from pprint import pprint as pp
         >>> pp(tokens)
     
     """
     
-    def __init__(self, lg: logging.Logger, raw_inputs: List[str]):
-        self.lg = lg
-        lines = map(lambda s: s.split('//')[0].strip(), raw_inputs)
-        codes = '\n'.join(filter(len, lines))
-        
-        self.str_literals, self.dbl_literals = [], []
-        codes = self.__extract_str_dbl_chr_literals(codes)
-        
-        for k, v in [*SPREADING_OPERANDS.items(), *SHRINKING_OPERANDS.items()]:
-            codes = codes.replace(k, v)
-        self.lg.info(f'codes after pre-processing:\n{codes}@EOF')
-        self.words = codes.split()
+    def __init__(self, lg: Optional[logging.Logger], raw_input: str):
+        self.lg, self.raw_input = lg, raw_input
     
-    def __extract_str_dbl_chr_literals(self, codes):
-        _ex_str = lambda m: f"{STR_LITERAL_REFERENCE}{len(self.str_literals)}" \
-                            f"{self.str_literals.append(m.group()[1:-1].encode(F_ENCODING).decode('unicode_escape')) or ''}"
-        _ex_dbl = lambda m: f"{DBL_LITERAL_REFERENCE}{len(self.dbl_literals)}" \
-                            f"{self.dbl_literals.append(eval(m.group())) or ''}"
-        _ex_chr = lambda m: str(ord(m.group()[1:-1].encode(F_ENCODING).decode('unicode_escape')))
-        codes = dbl_literal_reg.sub(_ex_dbl, str_literal_reg.sub(_ex_str, codes))
-        return chr_literal_reg.sub(_ex_chr, codes)
-    
-    def parse_tokens(self) -> List[Token]:
+    def parse_tokens(self) -> Tuple[List[Token], List[str]]:
+        words, str_literals, dbl_literals = self.__pre_process(self.raw_input)
         tokens = []
-        for w in self.words:
+        for w in words:
             token_type = STR_TO_TOKEN_TYPE.get(w, None)
             if token_type is not None:              # parse any key word or symbol
                 tokens.append(Token(token_type=token_type, val=w))
@@ -69,8 +57,23 @@ class LexicalTokenizer(object):
             elif w[0] == STR_LITERAL_REFERENCE:     # parse a literal of `string'
                 tokens.append(Token(token_type=TokenType.STR_LITERAL, val=int(w[1:])))
             elif w[0] == DBL_LITERAL_REFERENCE:     # parse a literal of `double'
-                tokens.append(Token(token_type=TokenType.DBL_LITERAL, val=self.dbl_literals[int(w[1:])]))
+                tokens.append(Token(token_type=TokenType.DBL_LITERAL, val=dbl_literals[int(w[1:])]))
             else:                                   # parsing failed
                 raise UnknownTokenErr(f'"{w}"')
-        self.lg.info(f'parsed tokens:\n{pformat(tokens)}')
-        return tokens
+        tokens.append(Token(token_type=TokenType.EOF_TOKEN, val='EOF sentry'))
+        tokens.append(Token(token_type=TokenType.EOF_TOKEN, val='EOF sentry for meta peek'))
+        self.lg.info(
+            f'\nstring literals:\n {pformat({f"{STR_LITERAL_REFERENCE}{i}": s for i, s in enumerate(str_literals)})}'
+            f'\nparsed tokens:\n {pformat(tokens)}\n'
+        )
+        return tokens, str_literals
+    
+    def __pre_process(self, raw_input):
+        lines = map(remove_inline_comment, filter(len, raw_input.splitlines()))
+        codes, str_literals, dbl_literals = extract_str_dbl_chr_literals('\n'.join(lines))
+        
+        for k, v in [*SPREADING_OPERANDS.items(), *SHRINKING_OPERANDS.items()]:
+            codes = codes.replace(k, v)
+        
+        self.lg.info(f'\ncodes after pre-processing:\n{codes}@EOF\n')
+        return codes.split(), str_literals, dbl_literals

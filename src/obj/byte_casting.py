@@ -1,7 +1,12 @@
+# Copyright (C) 2020, Keyu Tian, Beihang University.
+# This file is a part of my compiler assignment for Compilation Principles.
+# All rights reserved.
+
 import struct
 
 
 u8_to_bytes = lambda u8: struct.pack('>B', u8)
+i32_to_bytes = lambda i32: struct.pack('>l', i32)
 u32_to_bytes = lambda u32: struct.pack('>L', u32)
 u64_to_bytes = lambda u64: struct.pack('>Q', u64)
 f64_to_bytes = lambda f64: struct.pack('>d', f64)

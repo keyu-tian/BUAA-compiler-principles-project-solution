@@ -1,6 +1,12 @@
+# Copyright (C) 2020, Keyu Tian, Beihang University.
+# This file is a part of my compiler assignment for Compilation Principles.
+# All rights reserved.
+
 import logging
 import os
 from typing import Optional
+
+from meta import FS_ENCODING
 
 
 class C0Logger(object):
@@ -30,7 +36,7 @@ def create_logger(lg_name, f_name, level=logging.INFO, stream=True):
         fmt='[%(asctime)s][%(filename)10s][line:%(lineno)4d][%(levelname)4s] %(message)s',
         datefmt='%m-%d %H:%M:%S'
     )
-    fh = logging.FileHandler(f_name)
+    fh = logging.FileHandler(f_name, encoding=FS_ENCODING)
     fh.setFormatter(formatter)
     l.setLevel(level)
     l.addHandler(fh)
