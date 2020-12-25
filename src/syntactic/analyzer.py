@@ -2,8 +2,9 @@
 # This file is a part of my compiler assignment for Compilation Principles.
 # All rights reserved.
 import logging
+from copy import deepcopy
 from functools import partial
-from typing import List, Optional, NamedTuple, Iterable
+from typing import List, Optional, NamedTuple, Iterable, Dict
 
 from lexical.tokentype import Token, TokenType
 from syntactic.symbol.maintainer import SymbolMaintainer
@@ -26,35 +27,33 @@ class SyntacticAnalyzer(object):
     
     def __init__(self, lg: Optional[logging.Logger], tokens: List[Token], str_literals: List[str]):
         self.lg = lg
-        self.__tokens, self.__str_literals = tokens, str_literals
-        self.__tk_top = 0
-        self.__symbols = SymbolMaintainer()
-        self.__parsed = False
+        self._tokens, self._str_literals = tokens, str_literals
+        self._tk_top = 0
+        self._symbols = SymbolMaintainer(len(self._str_literals))
+        self._parsed = False
         
-        self.__global_instr: List[Instruction] = []
-        self.__local_instr: List[Instruction] = []
+        self._global_instr: List[Instruction] = []
+        self._local_instr: List[Instruction] = []
 
-        self.__return_val_ty = False
-
-        self.__ctrl_reaches_fn_end = False
+        self._return_val_ty = False
 
     def analyze_tokens(self):
-        if not self.__parsed:
+        if not self._parsed:
             # todo: add builtin funcs
-            self.__parsed = True
+            self._parsed = True
             self.parse_program()
-        return self.__str_literals, self.__global_instr, self.__symbols.global_vars, self.__symbols.global_funcs
+        return self._str_literals, self._global_instr, self._symbols.global_vars, self._symbols.global_funcs
 
     def get(self) -> Token:
-        tok = self.__tokens[self.__tk_top]
-        self.__tk_top += 1
+        tok = self._tokens[self._tk_top]
+        self._tk_top += 1
         return tok
 
     def peek(self):
-        return self.__tokens[self.__tk_top]
+        return self._tokens[self._tk_top]
 
     def meta_peek(self):
-        return self.__tokens[self.__tk_top + 1]
+        return self._tokens[self._tk_top + 1]
 
     def asserted_get(self, expected: Iterable[TokenType]) -> Token:
         tok = self.get()
@@ -79,12 +78,12 @@ class SyntacticAnalyzer(object):
             else:
                 raise SynProgramErr(f'unexpected token; FN, LET or CONST expected (got "{tok.token_type}")')
         
-        main = self.__symbols.asserted_get_func('main')
+        main = self._symbols.asserted_get_func('main')
         if len(main.arg_types) != 0:
             raise SynProgramErr(f'no arguments in the "main" func')
 
-    def __append_instr(self, instr: Instruction):
-        ls = self.__global_instr if self.__symbols.within_global_scope else self.__local_instr
+    def _append_instr(self, instr: Instruction):
+        ls = self._global_instr if self._symbols.within_global_scope else self._local_instr
         instr.ip = len(ls)
         ls.append(instr)
 
@@ -93,8 +92,7 @@ class SyntacticAnalyzer(object):
         .. note::
             func_decl -> 'fn' IDENT '(' func_args? ')' '->' TYPE block_stmt
         """
-        self.__local_instr.clear()
-        self.__ctrl_reaches_fn_end = False
+        self._local_instr.clear()
         
         self.asserted_get({TokenType.FN_KW})
         ident = self.get()
@@ -103,52 +101,53 @@ class SyntacticAnalyzer(object):
             raise SynDeclarationErr('function name missing')
         
         self.asserted_get({TokenType.L_PAREN})
+        decl_kws = []
         if self.peek().token_type != TokenType.R_PAREN:
-            arg_types = self.parse_func_args()
+            arg_types = self.parse_func_args(decl_kws)
         else:
             arg_types = []
         self.asserted_get({TokenType.R_PAREN})
         
         self.asserted_get({TokenType.ARROW})
         ty = self.asserted_get({TokenType.INT_TYPE_SPECIFIER, TokenType.DBL_LITERAL, TokenType.VOID_TYPE_SPECIFIER})
-        self.__return_val_ty = TypeDeduction.from_token_type(ty.token_type)
+        self._return_val_ty = TypeDeduction.from_token_type(ty.token_type)
         
-        has_ret_val = self.__return_val_ty != TypeDeduction.VOID
-        self.__symbols.enter_func(f'func {name}', has_ret_val)
-        all_returned = self.parse_block_stmt(brk_ctn_instr=None)
-        num_local_vars = self.__symbols.exit_func()
+        has_ret_val = self._return_val_ty != TypeDeduction.VOID
+        self._symbols.enter_func(f'func {name}', has_ret_val)
+        [self._symbols.declare_func_arg(**kw) for kw in decl_kws]
+        all_returned = self.parse_block_stmt(brk_ctn_instr=None, is_func=True)
+        num_local_vars = self._symbols.exit_func()
 
         if has_ret_val and not all_returned:
             raise SynDeclarationErr('control reaches end of non-void function')
         
-        self.__append_instr(Instruction(InstrType.RET))
-        self.__symbols.declare_func(
+        self._symbols.declare_func(
             name=name, arg_types=arg_types, num_local_vars=num_local_vars,
-            has_return_val=has_ret_val,
-            instructions=self.__local_instr
+            return_val_ty=self._return_val_ty,
+            instructions=deepcopy(self._local_instr)
         )
         
-    def parse_func_args(self) -> List[TypeDeduction]:
+    def parse_func_args(self, decl_kws: List[Dict]) -> List[TypeDeduction]:
         """
         .. note::
             func_args -> func_arg (',' func_arg)*
         """
-        arg_types = [self.parse_func_arg()]
+        arg_types = [self.parse_func_arg(decl_kws)]
         while self.peek().token_type == TokenType.COMMA:
             _ = self.get()
-            arg_types.append(self.parse_func_arg())
+            arg_types.append(self.parse_func_arg(decl_kws))
         return arg_types
 
-    def __parse_non_void_type_specifier(self) -> TypeDeduction:
+    def _parse_non_void_type_specifier(self) -> TypeDeduction:
         """
         .. note::
             type_specifier -> ':' TYPE
         """
         self.asserted_get({TokenType.COLON})
-        ty = self.asserted_get({TokenType.INT_TYPE_SPECIFIER, TokenType.DBL_LITERAL})
+        ty = self.asserted_get({TokenType.INT_TYPE_SPECIFIER, TokenType.DBL_TYPE_SPECIFIER})
         return TypeDeduction.from_token_type(ty.token_type)
     
-    def parse_func_arg(self) -> TypeDeduction:
+    def parse_func_arg(self, decl_kws: List[Dict]) -> TypeDeduction:
         """
         .. note::
             func_arg -> 'const'? IDENT type_specifier
@@ -160,11 +159,11 @@ class SyntacticAnalyzer(object):
             tok = self.get()
         if tok.token_type != TokenType.IDENTIFIER:
             raise SynDeclarationErr('argument name missing')
-        ty = self.__parse_non_void_type_specifier()
-        self.__symbols.declare_func_arg(name=tok.val, is_int=ty == TypeDeduction.INT, const=const)
+        ty = self._parse_non_void_type_specifier()
+        decl_kws.append(dict(name=tok.val, is_int=ty == TypeDeduction.INT, const=const))
         return ty
 
-    def parse_block_stmt(self, brk_ctn_instr: Optional[_BreakContinueInstr]) -> bool:
+    def parse_block_stmt(self, brk_ctn_instr: Optional[_BreakContinueInstr], is_func: bool=False) -> bool:
         """
         .. note::
             block_stmt -> '{'
@@ -175,7 +174,8 @@ class SyntacticAnalyzer(object):
             '}'
         """
         block_name = 'block' if brk_ctn_instr is None else 'loop'
-        self.__symbols.enter_scope(block_name)
+        if not is_func:
+            self._symbols.enter_scope(block_name)
 
         self.asserted_get({TokenType.L_BRACE})
 
@@ -210,7 +210,8 @@ class SyntacticAnalyzer(object):
                 self.parse_expr_stmt()
             
         self.asserted_get({TokenType.R_BRACE})
-        self.__symbols.exit_scope()
+        if not is_func:
+            self._symbols.exit_scope()
         return all_returned
 
     def parse_var_decl(self, const: bool):
@@ -225,7 +226,7 @@ class SyntacticAnalyzer(object):
         name = ident.val
         if ident.token_type != TokenType.IDENTIFIER:
             raise SynDeclarationErr('identifier missing')
-        decl_ty = self.__parse_non_void_type_specifier()
+        decl_ty = self._parse_non_void_type_specifier()
 
         tok = self.get()
         # parse '='
@@ -236,32 +237,32 @@ class SyntacticAnalyzer(object):
             if const:
                 raise SynDeclarationErr(f'uninitialized const "{name}"')
         # perform
-        offset = self.__symbols.declare_var(name=name, is_int=decl_ty == TypeDeduction.INT, inited=inited, const=const)
+        offset = self._symbols.declare_var(name=name, is_int=decl_ty == TypeDeduction.INT, inited=inited, const=const)
         if inited:
-            self.__append_instr(Instruction(InstrType.GLOBA if self.__symbols.within_global_scope else InstrType.LOCA, offset))
+            self._append_instr(Instruction(InstrType.GLOBA if self._symbols.within_global_scope else InstrType.LOCA, offset))
             val_ty = self.parse_summation()
             if val_ty != decl_ty:
                 raise SynTypeErr(f'invalid assignment from "{val_ty}" to "{decl_ty}"')
                 
-            self.__append_instr(Instruction(InstrType.STORE_64))
+            self._append_instr(Instruction(InstrType.STORE_64))
             tok = self.get()
         # parse ';'
         if tok.token_type != TokenType.SEMICOLON:
             raise SynDeclarationErr(f'";" missing in the declaration of var "{name}"')
     
-    def __parse_cond_and_block_within_if_else(self, has_cond: bool, last_instr_in_each_block: List, brk_ctn_instr: Optional[_BreakContinueInstr]):
+    def _parse_cond_and_block_within_if_else(self, has_cond: bool, last_instr_in_each_block: List, brk_ctn_instr: Optional[_BreakContinueInstr]):
         if has_cond:
             cond_ty = self.parse_condition()
             if not cond_ty.evaluable():
                 raise SynTypeErr(f'could not convert "{cond_ty}" to "bool"')
             br_false = Instruction(InstrType.BR_FALSE)
-            self.__append_instr(br_false)
+            self._append_instr(br_false)
         else:
             br_false = None
         
         all_returned = self.parse_block_stmt(brk_ctn_instr=brk_ctn_instr)     # parse the block statement
         last_instr_in_this_block = Instruction(InstrType.BR)
-        self.__append_instr(last_instr_in_this_block)
+        self._append_instr(last_instr_in_this_block)
         last_instr_in_each_block.append(last_instr_in_this_block)
         if has_cond:
             br_false.set_operand_to_skip_this_instr(last_instr_in_this_block)
@@ -276,7 +277,7 @@ class SyntacticAnalyzer(object):
 
         all_branches_returned = True
         last_instr_in_each_block = []
-        this_branch_returned = self.__parse_cond_and_block_within_if_else(True, last_instr_in_each_block, brk_ctn_instr)
+        this_branch_returned = self._parse_cond_and_block_within_if_else(True, last_instr_in_each_block, brk_ctn_instr)
         all_branches_returned &= this_branch_returned
         
         while self.peek().token_type == TokenType.ELSE_KW:
@@ -287,7 +288,7 @@ class SyntacticAnalyzer(object):
                 has_cond = True
             else:
                 has_cond = False
-            this_branch_returned = self.__parse_cond_and_block_within_if_else(has_cond, last_instr_in_each_block, brk_ctn_instr)
+            this_branch_returned = self._parse_cond_and_block_within_if_else(has_cond, last_instr_in_each_block, brk_ctn_instr)
             all_branches_returned &= this_branch_returned
             if not has_cond:
                 break
@@ -303,20 +304,24 @@ class SyntacticAnalyzer(object):
         """
         self.asserted_get({TokenType.WHILE_KW})
 
-        instr_before_cond = self.__local_instr[-1]
+        first_instr_in_the_cond_ip = len(self._local_instr)
         cond_ty = self.parse_condition()
+        first_instr_in_the_cond = self._local_instr[first_instr_in_the_cond_ip]
         if not cond_ty.evaluable():
             raise SynTypeErr(f'could not convert "{cond_ty}" to "bool"')
         br_false = Instruction(InstrType.BR_FALSE)
-        self.__append_instr(br_false)
+        self._append_instr(br_false)
         
         brk_ctn = _BreakContinueInstr([], [])
         all_returned = self.parse_block_stmt(brk_ctn_instr=brk_ctn)     # parse the block statement
         
         br_back = Instruction(InstrType.BR)
-        br_back.set_operand_to_skip_this_instr(instr_before_cond)
+        self._append_instr(br_back)
+        br_back.set_operand_to_reach_this_instr(first_instr_in_the_cond)
+        br_false.set_operand_to_skip_this_instr(br_back)
+        
         [br.set_operand_to_skip_this_instr(br_back) for br in brk_ctn.brk]
-        [br.set_operand_to_reach_this_instr(br_back) for br in brk_ctn.ctn]
+        [br.set_operand_to_reach_this_instr(first_instr_in_the_cond) for br in brk_ctn.ctn]
         
         return all_returned
     
@@ -327,11 +332,12 @@ class SyntacticAnalyzer(object):
 
         """
         self.asserted_get({TokenType.BREAK_KW})
+        self.asserted_get({TokenType.SEMICOLON})
         if brk_ctn_instr is None:
             raise SynStatementsErr('break statement not within a loop')
-        self.get()
-        self.asserted_get({TokenType.SEMICOLON})
-        brk_ctn_instr.brk.append(Instruction(InstrType.BR))
+        br = Instruction(InstrType.BR)
+        self._append_instr(br)
+        brk_ctn_instr.brk.append(br)
 
     def parse_continue_stmt(self, brk_ctn_instr: Optional[_BreakContinueInstr]):
         """
@@ -339,11 +345,12 @@ class SyntacticAnalyzer(object):
             continue_stmt -> 'continue' ';'
         """
         self.asserted_get({TokenType.CONTINUE_KW})
+        self.asserted_get({TokenType.SEMICOLON})
         if brk_ctn_instr is None:
             raise SynStatementsErr('continue statement not within a loop')
-        self.get()
-        self.asserted_get({TokenType.SEMICOLON})
-        brk_ctn_instr.brk.append(Instruction(InstrType.BR))
+        br = Instruction(InstrType.BR)
+        self._append_instr(br)
+        brk_ctn_instr.ctn.append(br)
 
     def parse_return_stmt(self):
         """
@@ -351,16 +358,16 @@ class SyntacticAnalyzer(object):
             return_stmt -> 'return' summation? ';'
         """
         self.asserted_get({TokenType.RETURN_KW})
-        if self.__return_val_ty == TypeDeduction.VOID:
+        if self._return_val_ty == TypeDeduction.VOID:
             self.asserted_get({TokenType.SEMICOLON})
         else:
-            self.__append_instr(Instruction(InstrType.ARGA, 0))
+            self._append_instr(Instruction(InstrType.ARGA, 0))
             ret_val_ty = self.parse_summation()
-            if ret_val_ty != self.__return_val_ty:
-                raise SynTypeErr(f'invalid conversion from "{ret_val_ty}" to "{self.__return_val_ty}"')
+            if ret_val_ty != self._return_val_ty:
+                raise SynTypeErr(f'invalid conversion from "{ret_val_ty}" to "{self._return_val_ty}"')
             self.asserted_get({TokenType.SEMICOLON})
-            self.__append_instr(Instruction(InstrType.STORE_64))
-        self.__append_instr(Instruction(InstrType.RET))
+            self._append_instr(Instruction(InstrType.STORE_64))
+        self._append_instr(Instruction(InstrType.RET))
     
     def parse_expr_stmt(self):
         """
@@ -371,7 +378,7 @@ class SyntacticAnalyzer(object):
             self.parse_assignment()
         else:
             self.parse_condition()
-            self.__append_instr(Instruction(InstrType.POP))
+            self._append_instr(Instruction(InstrType.POP))
         self.asserted_get({TokenType.SEMICOLON})
         
     def parse_assignment(self):
@@ -383,19 +390,19 @@ class SyntacticAnalyzer(object):
         if ident.token_type != TokenType.IDENTIFIER:
             raise SynAssignmentErr('identifier missing')
         var_name = ident.val
-        var = self.__symbols.asserted_init_var(var_name)
+        var = self._symbols.asserted_init_var(var_name)
         var_ty = TypeDeduction.from_is_int(var.is_int)
         if var.const:
             raise SynAssignmentErr(f'assignment of read-only var "{var_name}"')
         
-        self.__append_instr(Instruction.from_var_loading(var))
+        self._append_instr(Instruction.from_var_loading(var))
         
-        self.asserted_get({TokenType.EQUAL_SIGN})
+        self.asserted_get({TokenType.ASSIGN})
         
         val_ty = self.parse_summation()
         if val_ty != var_ty:
             raise SynTypeErr(f'invalid conversion from "{val_ty}" to "{var_ty}"')
-        self.__append_instr(Instruction(InstrType.STORE_64))
+        self._append_instr(Instruction(InstrType.STORE_64))
 
     # NOTE: the result will be stored at the top of vm.stack
     def parse_condition(self) -> TypeDeduction:
@@ -420,7 +427,7 @@ class SyntacticAnalyzer(object):
             rhs_type = self.parse_summation()
             if lhs_type != rhs_type:
                 raise SynTypeErr(f'cannot compare "{lhs_type}" with "{rhs_type}"')
-            [self.__append_instr(Instruction(t)) for t in op_tt_to_instrs[op.token_type]]
+            [self._append_instr(Instruction(t)) for t in op_tt_to_instrs[op.token_type]]
             expr_type = TypeDeduction.BOOL
         return expr_type
         
@@ -440,7 +447,7 @@ class SyntacticAnalyzer(object):
             rhs_type = self.parse_product()
             if lhs_type != rhs_type:
                 raise SynTypeErr(f'cannot add "{lhs_type}" with "{rhs_type}"')
-            self.__append_instr(Instruction(it))
+            self._append_instr(Instruction(it))
         return lhs_type
 
     # NOTE: the result will be stored at the top of vm.stack
@@ -459,7 +466,7 @@ class SyntacticAnalyzer(object):
             rhs_type = self.parse_factor()
             if lhs_type != rhs_type:
                 raise SynTypeErr(f'cannot multiply "{lhs_type}" with "{rhs_type}"')
-            self.__append_instr(Instruction(it))
+            self._append_instr(Instruction(it))
         return lhs_type
 
     # NOTE: the result will be stored at the top of vm.stack
@@ -471,63 +478,85 @@ class SyntacticAnalyzer(object):
         elem_ty = self.parse_element()
         while self.peek().token_type == TokenType.AS_KW:
             _ = self.get()
-            as_ty = self.asserted_get({TokenType.INT_TYPE_SPECIFIER, TokenType.DBL_LITERAL})
+            as_ty = self.asserted_get({TokenType.INT_TYPE_SPECIFIER, TokenType.DBL_TYPE_SPECIFIER})
             if elem_ty == as_ty:
                 continue
             cast = InstrType.ITOF if elem_ty == TypeDeduction.INT else InstrType.FTOI
-            self.__append_instr(Instruction(cast))
-            elem_ty = as_ty
+            self._append_instr(Instruction(cast))
+            elem_ty = TypeDeduction.from_token_type(as_ty.token_type)
         return elem_ty
 
     # NOTE: the result will be stored at the top of vm.stack
     def parse_element(self) -> TypeDeduction:
         """
         .. note::
-            element -> '-'* literal | func_calling | IDENT | '(' summation ')'     # todo: '-'* or '-'?
+            element -> '-'* literal | func_calling | IDENT | '(' condition ')'     # todo: '-'* or '-'?
         """
         sign = 1
         while self.peek().token_type == TokenType.MINUS:
             self.get()
             sign *= -1
         
-        tok = self.get()
-        if tok.token_type == TokenType.STR_LITERAL:
-            raise SynExpressionErr('string literal cannot be calculated')
+        # if self.peek().token_type == TokenType.STR_LITERAL:
+            # raise SynExpressionErr('string literal cannot be calculated')           # todo:
         
-        if tok.token_type in {TokenType.UINT_LITERAL, TokenType.DBL_LITERAL}:
-            self.__append_instr(Instruction(InstrType.PUSH, tok.val))
-            ty = TypeDeduction.from_token_type(tok.token_type)
+        if self.peek().token_type in {TokenType.UINT_LITERAL, TokenType.DBL_LITERAL, TokenType.STR_LITERAL}:
+            lit = self.get()
+            self._append_instr(Instruction(InstrType.PUSH, lit.val))
+            ty = TypeDeduction.from_token_type(lit.token_type)
         
-        elif tok.token_type == TokenType.IDENTIFIER:
-            if self.peek().token_type == TokenType.L_PAREN:
+        elif self.peek().token_type == TokenType.IDENTIFIER:
+            if self.meta_peek().token_type == TokenType.L_PAREN:
                 ty = self.parse_func_calling()
             else:
-                var = self.__symbols.asserted_get_var_or_arg(tok.val)
-                self.__append_instr(Instruction.from_var_loading(var))
-                self.__append_instr(Instruction(InstrType.LOAD_64))
+                ident = self.get()
+                var = self._symbols.asserted_get_var_or_arg(ident.val)
+                self._append_instr(Instruction.from_var_loading(var))
+                self._append_instr(Instruction(InstrType.LOAD_64))
                 ty = TypeDeduction.from_is_int(var.is_int)
-        else: # must be summation
+        else: # must be condition
             self.asserted_get({TokenType.L_PAREN})
-            ty = self.parse_summation()
+            ty = self.parse_condition()
             self.asserted_get({TokenType.R_PAREN})
         if sign < 0:
-            self.__append_instr(Instruction(InstrType.NEG_I if ty == TypeDeduction.INT else InstrType.NEG_F))
+            self._append_instr(Instruction(InstrType.NEG_I if ty == TypeDeduction.INT else InstrType.NEG_F))
         return ty
 
     def parse_func_calling(self) -> TypeDeduction:
         """
         .. note::
-            func_calling -> func_name '(' func_params? ')'
+            func_calling -> IDENT '(' func_params? ')'
         """
-
-    def parse_func_params(self):
+        ident = self.get()
+        func_name = ident.val
+        if ident.token_type != TokenType.IDENTIFIER:
+            raise SynCallErr(f'function\'s name missing')
+        
+        func = self._symbols.asserted_get_func(func_name)
+        if func.return_val_ty != TypeDeduction.VOID:
+            self._append_instr(Instruction(InstrType.STACKALLOC, 1))
+        
+        self.asserted_get({TokenType.L_PAREN})
+        param_types = self.parse_func_params()
+        self._append_instr(Instruction(InstrType.CALLNAME, func.offset))
+        if not all(at == pt for at, pt in zip(func.arg_types, param_types)):
+            raise SynTypeErr(f'type mismatched in function call of "{func_name}"')
+        self.asserted_get({TokenType.R_PAREN})
+        return func.return_val_ty
+        
+    def parse_func_params(self) -> List:
         """
         .. note::
-            func_params -> expression (',' expression)*
+            func_params -> summation (',' summation)*
         """
+        param_types = [self.parse_summation()]
+        while self.peek().token_type == TokenType.COMMA:
+            _ = self.get()
+            param_types.append(self.parse_summation())
+        return param_types
 
 
-if __name__ == '__main__':
+if __name__ == '_main_':
     from pprint import pprint as pp
     from lexical.tokenizer import LexicalTokenizer
     

@@ -88,9 +88,12 @@ class Instruction(object):
         self.operand_32bits = self.instr_type not in _operand_64bits_instr_types
         self.ip = 0
     
-    def __str__(self):
+    def __repr__(self):
         ty_str = 'ui'[self.operand_signed] + ['64', '32'][self.operand_32bits]
-        op_str = '' if self.operand is None else f' ({ty_str}: {self.operand})'
+        # op_str = '' if self.operand is None else f' ({ty_str}: {self.operand})'
+        op_str = '' if self.operand is None else f' ({self.operand})'
+        if self.operand_signed:
+            op_str = op_str[:-1] + ', ' + f'next={self.ip + self.operand + 1})'
         return self.instr_type.name + op_str
 
     def set_operand_to_skip_this_instr(self, instr):
@@ -108,7 +111,6 @@ class Instruction(object):
         else:
             it = InstrType.LOCA
         return Instruction(it, var.offset)
-    
     
 if __name__ == '__main__':
     table = parse_html(url=r'https://c0.karenia.cc/navm/instruction.html', target_name='table')

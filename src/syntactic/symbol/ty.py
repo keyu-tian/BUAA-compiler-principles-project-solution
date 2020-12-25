@@ -24,6 +24,9 @@ class TypeDeduction(Enum):
             TokenType.INT_TYPE_SPECIFIER: TypeDeduction.INT,
             TokenType.DBL_TYPE_SPECIFIER: TypeDeduction.DOUBLE,
             TokenType.VOID_TYPE_SPECIFIER: TypeDeduction.VOID,
+            
+            TokenType.UINT_LITERAL: TypeDeduction.INT,
+            TokenType.DBL_LITERAL: TypeDeduction.DOUBLE,
             TokenType.STR_LITERAL: TypeDeduction.STRING_OFFSET,
         }[tt]
     

@@ -20,14 +20,14 @@ class LexicalTokenizer(object):
         parse_tokens_from_raw_input:
             Parses all tokens from the separated words
         
-        __pre_process:
+        _pre_process:
             Performs pre-processing for the later lexical analysis, including:
         
             * Comments removing.
             * Literals extracting.
             * Words splitting.
     
-        __extract_str_dbl_chr_literals:
+        _extract_str_dbl_chr_literals:
             Extracts string, double and character literals, converting them to references or integer values.
     
     Examples:
@@ -44,7 +44,7 @@ class LexicalTokenizer(object):
         self.lg, self.raw_input = lg, raw_input
     
     def parse_tokens(self) -> Tuple[List[Token], List[str]]:
-        words, str_literals, dbl_literals = self.__pre_process(self.raw_input)
+        words, str_literals, dbl_literals = self._pre_process(self.raw_input)
         tokens = []
         for w in words:
             token_type = STR_TO_TOKEN_TYPE.get(w, None)
@@ -68,7 +68,7 @@ class LexicalTokenizer(object):
         )
         return tokens, str_literals
     
-    def __pre_process(self, raw_input):
+    def _pre_process(self, raw_input):
         lines = map(remove_inline_comment, filter(len, raw_input.splitlines()))
         codes, str_literals, dbl_literals = extract_str_dbl_chr_literals('\n'.join(lines))
         

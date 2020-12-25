@@ -30,11 +30,19 @@ class _FuncAttrs(NamedTuple):
     name: str
     arg_types: List[TypeDeduction]
     num_local_vars: int
-    has_return_val: bool
+    return_val_ty: TypeDeduction
     instructions: List[Instruction]
     
     @staticmethod
     def is_func(): return True
+
+    def __repr__(self):
+        ins_s = '\t' + '\n\t'.join([
+            f'{instr.ip}: {instr}'
+            for instr in self.instructions
+        ])
+        args_s = ", ".join(map(str, self.arg_types))
+        return f'fn {self.name} [{self.offset}] loc={self.num_local_vars}, args=[{args_s}] -> ret={self.return_val_ty} {{\n{ins_s}\n}}'
 
 
 class _ScopeWiseSymbolTable(Dict[str, Union[_VarAttrs, _FuncAttrs]]):

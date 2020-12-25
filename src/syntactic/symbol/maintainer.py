@@ -12,96 +12,98 @@ from vm.instruction import Instruction
 
 class SymbolMaintainer(object):
     
-    def __init__(self):
+    def __init__(self, num_str_literals):
         super(SymbolMaintainer, self).__init__()
-        self.__global_symbol_cnt = self.__num_func_args = self.__num_local_vars = 0
-        self.__num_ret_vals = False
-        self.__global_table = _ScopeWiseSymbolTable('global')
-        self.__local_tables: List[_ScopeWiseSymbolTable] = []
-        self.__cur_func_name: str = ...
+        self._global_symbol_cnt = num_str_literals
+        self._num_func_args = self._num_local_vars = 0
+        self._num_ret_vals = False
+        self._global_table = _ScopeWiseSymbolTable('global')
+        self._local_tables: List[_ScopeWiseSymbolTable] = []
+        self._cur_func_name: str = ...
 
     @property
     def global_vars(self):
-        return list(filter(lambda x: not x.is_func(), self.__global_table.values()))
+        return list(filter(lambda x: not x.is_func(), self._global_table.values()))
 
     @property
     def global_funcs(self):
-        return list(filter(lambda x: x.is_func(), self.__global_table.values()))
+        return list(filter(lambda x: x.is_func(), self._global_table.values()))
     
-    def enter_func(self, name, has_return_value: bool):
-        self.__num_func_args = self.__num_local_vars = 0
-        self.__cur_func_name = name
-        self.__num_ret_vals = int(has_return_value)
-        # self.enter_scope(name)
+    def enter_func(self, name: str, has_return_value: bool):
+        self._num_func_args = self._num_local_vars = 0
+        self._cur_func_name = name
+        self._num_ret_vals = int(has_return_value)
+        self.enter_scope(f'@func {name}')
     
     def enter_scope(self, name):
-        self.__local_tables.append(_ScopeWiseSymbolTable(name))
+        self._local_tables.append(_ScopeWiseSymbolTable(name))
     
     def exit_scope(self):
-        return self.__local_tables.pop()
+        return self._local_tables.pop()
     
     def exit_func(self):
-        return self.__num_local_vars
+        self.exit_scope()
+        return self._num_local_vars
     
-    def declare_func(self, name: str, arg_types: List[TypeDeduction], num_local_vars: int, has_return_val: bool, instructions: List[Instruction]):
-        self.__global_table[name] = _FuncAttrs(self.__global_symbol_cnt, name, arg_types, num_local_vars, has_return_val, instructions)
-        self.__global_symbol_cnt += 1   # indexing from 0
+    def declare_func(self, name: str, arg_types: List[TypeDeduction], num_local_vars: int, return_val_ty: TypeDeduction, instructions: List[Instruction]):
+        self._global_table[name] = _FuncAttrs(self._global_symbol_cnt, name, arg_types, num_local_vars, return_val_ty, instructions)
+        self._global_symbol_cnt += 1   # indexing from 0
 
     def declare_func_arg(self, name: str, is_int: bool, const: bool):
-        self.__local_tables[-1][name] = _VarAttrs(self.__num_ret_vals + self.__num_func_args, is_global=False, is_arg=True, is_int=is_int, inited=True, const=const)
-        self.__num_func_args += 1
+        self._local_tables[-1][name] = _VarAttrs(self._num_ret_vals + self._num_func_args, is_global=False, is_arg=True, is_int=is_int, inited=True, const=const)
+        self._num_func_args += 1
 
     @property
     def within_global_scope(self):
-        return len(self.__local_tables) == 0
+        return len(self._local_tables) == 0
 
     def declare_var(self, name: str, is_int: bool, inited: bool, const: bool):
         kw = dict(is_arg=False, is_int=is_int, inited=inited, const=const)
         if self.within_global_scope:
             kw['is_global'] = True
-            tbl, offset_attr_name = self.__global_table, '__global_symbol_cnt'
+            tbl, offset_attr_name = self._global_table, '_global_symbol_cnt'
         else:
             kw['is_global'] = False
-            tbl, offset_attr_name = self.__local_tables[-1], '__num_local_vars'
-        return self.__declare_var(tbl, name, offset_attr_name, kw)   # returns the offset for generating LOAD instruction
+            tbl, offset_attr_name = self._local_tables[-1], '_num_local_vars'
+        return self._declare_var(tbl, name, offset_attr_name, kw)   # returns the offset for generating LOAD instruction
 
-    def __declare_var(self, tbl, name, offset_attr_name, kw):
+    def _declare_var(self, tbl, name, offset_attr_name, kw):
         offset = getattr(self, offset_attr_name)
         tbl[name] = _VarAttrs(offset=offset, **kw)
         setattr(self, offset_attr_name, offset + 1)
         return offset
 
     # def declare_global_var(self, name: str, is_int: bool, inited: bool, const: bool):
-    #     self.__global_table[name] = _VarAttrs(self.__global_symbol_cnt, is_arg=False, is_int=is_int, inited=inited, const=const)
-    #     self.__global_symbol_cnt += 1
-    #     return self.__global_symbol_cnt - 1     # returns the offset for generating LOAD instruction
+    #     self._global_table[name] = _VarAttrs(self._global_symbol_cnt, is_arg=False, is_int=is_int, inited=inited, const=const)
+    #     self._global_symbol_cnt += 1
+    #     return self._global_symbol_cnt - 1     # returns the offset for generating LOAD instruction
     #
     # def declare_local_var(self, name: str, is_int: bool, inited: bool, const: bool):
-    #     self.__local_tables[-1][name] = _VarAttrs(self.__num_local_vars, is_arg=False, is_int=is_int, inited=inited, const=const)
-    #     self.__num_local_vars += 1
-    #     return self.__num_local_vars - 1        # returns the offset for generating LOAD instruction
+    #     self._local_tables[-1][name] = _VarAttrs(self._num_local_vars, is_arg=False, is_int=is_int, inited=inited, const=const)
+    #     self._num_local_vars += 1
+    #     return self._num_local_vars - 1        # returns the offset for generating LOAD instruction
     
     def asserted_get_var_or_arg(self, name):
-        return self.__asserted_get_symbol(name, expect_func=False)[0]
+        return self._asserted_get_symbol(name, expect_func=False)[0]
     
     def asserted_get_func(self, name):
-        return self.__asserted_get_symbol(name, expect_func=True)[0]
+        return self._asserted_get_symbol(name, expect_func=True)[0]
     
     def asserted_init_var(self, name) -> _VarAttrs:
-        var, tbl = self.__asserted_get_symbol(name, expect_func=False)
+        var, tbl = self._asserted_get_symbol(name, expect_func=False)
         tbl.update({name: var.inited_replica})
         return var
     
-    def __asserted_get_symbol(self, name: str, expect_func: bool):
+    def _asserted_get_symbol(self, name: str, expect_func: bool):
         clz, hint = (_FuncAttrs, 'function') if expect_func else (_VarAttrs, 'local variable or argument')
-        for tbl in reversed([self.__global_table] + self.__local_tables):
+        for tbl in reversed([self._global_table] + self._local_tables):
             syb = tbl.get(name, None)
             if isinstance(syb, clz):
                 return syb, tbl
         raise SynReferenceErr(f'reference of undefined {hint} "{name}"')
     
     def __str__(self):
-        return f'=> global:\n{self.__global_table}\n=> locals:\n{chr(10).join(map(str, self.__local_tables))}\n'
+        return f'=> global:\n{self._global_table}\n=> locals:\n{chr(10).join(map(str, self._local_tables))}\n'
 
 
 if __name__ == '__main__':

@@ -53,3 +53,7 @@ class SynExpressionErr(SyntacticCompilationError):
 
 class SynFactorErr(SyntacticCompilationError):
     pass
+
+
+class SynCallErr(SyntacticCompilationError):
+    pass
