@@ -9,7 +9,6 @@ import sys
 import time
 import traceback
 from pprint import pformat as pf
-from typing import TextIO
 
 from lexical.lex_err import TokenCompilationError
 from lexical.tokenizer import LexicalTokenizer
@@ -58,4 +57,6 @@ def main():
 
 
 if __name__ == '__main__':
+    if LOCAL:
+        sys.argv[2] = '../tests/3-double/ac3-pi-and-e.input.txt'
     main()

@@ -45,7 +45,7 @@ class SyntacticAnalyzer(object):
         self._symbols.declare_func('putint', [TypeDeduction.INT], 0, TypeDeduction.VOID, [])
         self._symbols.declare_func('putdouble', [TypeDeduction.DOUBLE], 0, TypeDeduction.VOID, [])
         self._symbols.declare_func('putchar', [TypeDeduction.INT], 0, TypeDeduction.VOID, [])
-        self._symbols.declare_func('putstr', [TypeDeduction.INT], 0, TypeDeduction.VOID, [])
+        self._symbols.declare_func('putstr', [TypeDeduction.STRING_OFFSET], 0, TypeDeduction.VOID, [])
         self._symbols.declare_func('putln', [], 0, TypeDeduction.VOID, [])
     
     def _finish_start_func(self):
@@ -127,7 +127,7 @@ class SyntacticAnalyzer(object):
         self.asserted_get({TokenType.R_PAREN})
         
         self.asserted_get({TokenType.ARROW})
-        ty = self.asserted_get({TokenType.INT_TYPE_SPECIFIER, TokenType.DBL_LITERAL, TokenType.VOID_TYPE_SPECIFIER})
+        ty = self.asserted_get({TokenType.INT_TYPE_SPECIFIER, TokenType.DBL_TYPE_SPECIFIER, TokenType.VOID_TYPE_SPECIFIER})
         self._return_val_ty = TypeDeduction.from_token_type(ty.token_type)
         
         has_ret_val = self._return_val_ty != TypeDeduction.VOID
@@ -301,22 +301,22 @@ class SyntacticAnalyzer(object):
         this_branch_returned = self._parse_cond_and_block_within_if_else(True, last_instr_in_each_block, brk_ctn_instr)
         all_branches_returned &= this_branch_returned
         
+        else_parsed = False
         while self.peek().token_type == TokenType.ELSE_KW:
             self.get()
             
             if self.peek().token_type == TokenType.IF_KW:
                 self.get()
-                has_cond = True
             else:
-                has_cond = False
-            this_branch_returned = self._parse_cond_and_block_within_if_else(has_cond, last_instr_in_each_block, brk_ctn_instr)
+                else_parsed = True
+            this_branch_returned = self._parse_cond_and_block_within_if_else(not else_parsed, last_instr_in_each_block, brk_ctn_instr)
             all_branches_returned &= this_branch_returned
-            if not has_cond:
+            if else_parsed:
                 break
         
         [br.set_operand_to_skip_this_instr(last_instr_in_each_block[-1]) for br in last_instr_in_each_block]
         
-        return all_branches_returned
+        return else_parsed and all_branches_returned
     
     def parse_while_stmt(self) -> bool:
         """
