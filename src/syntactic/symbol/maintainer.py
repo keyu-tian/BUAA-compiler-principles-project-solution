@@ -5,7 +5,7 @@
 from typing import List
 
 from syntactic.symbol.ty import TypeDeduction
-from syntactic.symbol.table import _ScopeWiseSymbolTable, _VarAttrs, _FuncAttrs
+from syntactic.symbol.table import _ScopeWiseSymbolTable, VarAttrs, FuncAttrs
 from syntactic.syn_err import SynReferenceErr
 from vm.instruction import Instruction
 
@@ -22,12 +22,12 @@ class SymbolMaintainer(object):
         self._cur_func_name: str = ...
 
     @property
-    def global_vars(self):
-        return list(filter(lambda x: not x.is_func(), self._global_table.values()))
+    def global_symbols(self):
+        return list(self._global_table.values())
 
     @property
     def global_funcs(self):
-        return list(filter(lambda x: x.is_func(), self._global_table.values()))
+        return list(filter(lambda x: x.is_func() and len(x.instructions), self._global_table.values()))
     
     def enter_func(self, name: str, has_return_value: bool):
         self._num_func_args = self._num_local_vars = 0
@@ -46,11 +46,11 @@ class SymbolMaintainer(object):
         return self._num_local_vars
     
     def declare_func(self, name: str, arg_types: List[TypeDeduction], num_local_vars: int, return_val_ty: TypeDeduction, instructions: List[Instruction]):
-        self._global_table[name] = _FuncAttrs(self._global_symbol_cnt, name, arg_types, num_local_vars, return_val_ty, instructions)
+        self._global_table[name] = FuncAttrs(self._global_symbol_cnt, name, arg_types, num_local_vars, return_val_ty, instructions)
         self._global_symbol_cnt += 1   # indexing from 0
 
     def declare_func_arg(self, name: str, is_int: bool, const: bool):
-        self._local_tables[-1][name] = _VarAttrs(self._num_ret_vals + self._num_func_args, is_global=False, is_arg=True, is_int=is_int, inited=True, const=const)
+        self._local_tables[-1][name] = VarAttrs(self._num_ret_vals + self._num_func_args, is_global=False, is_arg=True, is_int=is_int, inited=True, const=const)
         self._num_func_args += 1
 
     @property
@@ -69,7 +69,7 @@ class SymbolMaintainer(object):
 
     def _declare_var(self, tbl, name, offset_attr_name, kw):
         offset = getattr(self, offset_attr_name)
-        tbl[name] = _VarAttrs(offset=offset, **kw)
+        tbl[name] = VarAttrs(offset=offset, **kw)
         setattr(self, offset_attr_name, offset + 1)
         return offset
 
@@ -89,13 +89,13 @@ class SymbolMaintainer(object):
     def asserted_get_func(self, name):
         return self._asserted_get_symbol(name, expect_func=True)[0]
     
-    def asserted_init_var(self, name) -> _VarAttrs:
+    def asserted_init_var(self, name) -> VarAttrs:
         var, tbl = self._asserted_get_symbol(name, expect_func=False)
         tbl.update({name: var.inited_replica})
         return var
     
     def _asserted_get_symbol(self, name: str, expect_func: bool):
-        clz, hint = (_FuncAttrs, 'function') if expect_func else (_VarAttrs, 'local variable or argument')
+        clz, hint = (FuncAttrs, 'function') if expect_func else (VarAttrs, 'local variable or argument')
         for tbl in reversed([self._global_table] + self._local_tables):
             syb = tbl.get(name, None)
             if isinstance(syb, clz):

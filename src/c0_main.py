@@ -5,18 +5,20 @@
 import argparse
 import logging
 import os
+import sys
+import time
 import traceback
 from pprint import pformat as pf
-
-import time
-import sys
+from typing import TextIO
 
 from lexical.lex_err import TokenCompilationError
 from lexical.tokenizer import LexicalTokenizer
+from meta import LOCAL
+from obj.assembler import Assembler
 from syntactic.analyzer import SyntacticAnalyzer
 from syntactic.syn_err import SyntacticCompilationError
 from utils.log import C0Logger, create_logger
-from utils.misc import r_open, time_str
+from utils.misc import r_open, time_str, wb_open, w_open
 
 
 def main():
@@ -30,18 +32,24 @@ def main():
     # noinspection PyTypeChecker
     lg: logging.Logger = C0Logger(logger) # just for the code completion
     
-    with r_open(args.i) as fin:
+    with r_open(args.i) as fin, wb_open(args.o) as fout:
+        obj_hint_fp = w_open(args.o + '.txt') if LOCAL else sys.stdout
         raw_input = fin.read()
         try:
             tokens, str_literals = LexicalTokenizer(lg=lg, raw_input=raw_input).parse_tokens()
             st_t = time.time()
             s = SyntacticAnalyzer(lg=lg, tokens=tokens, str_literals=str_literals)
-            str_literals, global_instr, global_vars, global_funcs = s.analyze_tokens()
+            str_literals, global_symbols, global_funcs = s.analyze_tokens()
+            b_arr = Assembler(lg, str_literals, global_symbols, global_funcs).dump()
+            fout.write(b_arr)
+            print('\n'.join(b_arr.hints), file=obj_hint_fp)
+            if LOCAL:
+                obj_hint_fp.close()
+            
             dt = (time.time() - st_t) * 1000
-            lg.info(f'str_literals = \n {pf(str_literals)}')
-            lg.info(f'global_instr = \n {pf(global_instr)}')
-            lg.info(f'global_vars = \n {pf(global_vars)}')
-            lg.info(f'global_funcs = \n {pf(global_funcs)}')
+            lg.info(f'str_literals = ({len(str_literals)}) \n {pf(str_literals)}')
+            lg.info(f'global_symbols = ({len(global_symbols)}) \n {pf(global_symbols)}')
+            lg.info(f'global_funcs = ({len(global_funcs)}) \n {pf(global_funcs)}')
             lg.info(f'time cost: {dt:.2f}ms')
         except (TokenCompilationError, SyntacticCompilationError):
             traceback.print_exc()
@@ -50,5 +58,5 @@ def main():
 
 
 if __name__ == '__main__':
-    # sys.argv[2] = '../tests/1-comment/ac1.input.txt'
+    sys.argv[2] = '../tests/6-break-continue/ac3.input.txt'
     main()

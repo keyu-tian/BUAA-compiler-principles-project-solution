@@ -10,7 +10,7 @@ from syntactic.syn_err import SynDeclarationErr
 from vm.instruction import Instruction
 
 
-class _VarAttrs(NamedTuple):
+class VarAttrs(NamedTuple):
     offset: int
     is_global: bool
     is_arg: bool
@@ -25,7 +25,7 @@ class _VarAttrs(NamedTuple):
     def inited_replica(self): return self._replace(inited=True)
 
 
-class _FuncAttrs(NamedTuple):
+class FuncAttrs(NamedTuple):
     offset: int
     name: str
     arg_types: List[TypeDeduction]
@@ -36,16 +36,23 @@ class _FuncAttrs(NamedTuple):
     @staticmethod
     def is_func(): return True
 
+    @property
+    def num_ret_vals(self): return int(self.return_val_ty != TypeDeduction.VOID)
+
     def __repr__(self):
         ins_s = '\t' + '\n\t'.join([
             f'{instr.ip}: {instr}'
             for instr in self.instructions
         ])
+        if len(ins_s) > 1:
+            ins_s = '\n' + ins_s + '\n'
+        else:
+            ins_s = ' '
         args_s = ", ".join(map(str, self.arg_types))
-        return f'fn {self.name} [{self.offset}] loc={self.num_local_vars}, args=[{args_s}] -> ret={self.return_val_ty} {{\n{ins_s}\n}}'
+        return f'fn {self.name} [{self.offset}] loc={self.num_local_vars}, args=[{args_s}] -> ret={self.return_val_ty} {{{ins_s}}}'
 
 
-class _ScopeWiseSymbolTable(Dict[str, Union[_VarAttrs, _FuncAttrs]]):
+class _ScopeWiseSymbolTable(Dict[str, Union[VarAttrs, FuncAttrs]]):
     
     def __init__(self, name):
         super(_ScopeWiseSymbolTable, self).__init__()

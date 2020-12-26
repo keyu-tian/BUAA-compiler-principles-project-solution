@@ -25,7 +25,7 @@ class SyntacticAnalyzer(object):
     
     """
     
-    def __init__(self, lg: Optional[logging.Logger], tokens: List[Token], str_literals: List[str]):
+    def __init__(self, lg: logging.Logger, tokens: List[Token], str_literals: List[str]):
         self.lg = lg
         self._tokens, self._str_literals = tokens, str_literals
         self._tk_top = 0
@@ -37,12 +37,34 @@ class SyntacticAnalyzer(object):
 
         self._return_val_ty = False
 
+    def _declare_builtin_funcs(self):
+        self._symbols.declare_func('getint', [], 0, TypeDeduction.INT, [])
+        self._symbols.declare_func('getdouble', [], 0, TypeDeduction.DOUBLE, [])
+        self._symbols.declare_func('getchar', [], 0, TypeDeduction.INT, [])
+        
+        self._symbols.declare_func('putint', [TypeDeduction.INT], 0, TypeDeduction.VOID, [])
+        self._symbols.declare_func('putdouble', [TypeDeduction.DOUBLE], 0, TypeDeduction.VOID, [])
+        self._symbols.declare_func('putchar', [TypeDeduction.INT], 0, TypeDeduction.VOID, [])
+        self._symbols.declare_func('putstr', [TypeDeduction.INT], 0, TypeDeduction.VOID, [])
+        self._symbols.declare_func('putln', [], 0, TypeDeduction.VOID, [])
+    
+    def _finish_start_func(self):
+        main = self._symbols.asserted_get_func('main')
+        if len(main.arg_types) != 0:
+            raise SynProgramErr(f'arguments found in the "main" func')
+        
+        if main.num_ret_vals:
+            self._global_instr.append(Instruction(InstrType.STACKALLOC))
+        self._global_instr.append(Instruction(InstrType.CALLNAME, main.offset))
+        
     def analyze_tokens(self):
         if not self._parsed:
-            # todo: add builtin funcs
+            self._symbols.declare_func('_start', [], 0, TypeDeduction.VOID, self._global_instr)
+            self._declare_builtin_funcs()
             self._parsed = True
             self.parse_program()
-        return self._str_literals, self._global_instr, self._symbols.global_vars, self._symbols.global_funcs
+            self._finish_start_func()
+        return self._str_literals, self._symbols.global_symbols, self._symbols.global_funcs
 
     def get(self) -> Token:
         tok = self._tokens[self._tk_top]
@@ -78,10 +100,6 @@ class SyntacticAnalyzer(object):
             else:
                 raise SynProgramErr(f'unexpected token; FN, LET or CONST expected (got "{tok.token_type}")')
         
-        main = self._symbols.asserted_get_func('main')
-        if len(main.arg_types) != 0:
-            raise SynProgramErr(f'no arguments in the "main" func')
-
     def _append_instr(self, instr: Instruction):
         ls = self._global_instr if self._symbols.within_global_scope else self._local_instr
         instr.ip = len(ls)
@@ -116,11 +134,14 @@ class SyntacticAnalyzer(object):
         self._symbols.enter_func(f'func {name}', has_ret_val)
         [self._symbols.declare_func_arg(**kw) for kw in decl_kws]
         all_returned = self.parse_block_stmt(brk_ctn_instr=None, is_func=True)
-        num_local_vars = self._symbols.exit_func()
 
-        if has_ret_val and not all_returned:
-            raise SynDeclarationErr('control reaches end of non-void function')
+        if not all_returned:
+            if has_ret_val:
+                raise SynDeclarationErr('control reaches end of non-void function')
+            else:
+                self._append_instr(Instruction(InstrType.RET))
         
+        num_local_vars = self._symbols.exit_func()
         self._symbols.declare_func(
             name=name, arg_types=arg_types, num_local_vars=num_local_vars,
             return_val_ty=self._return_val_ty,
@@ -377,8 +398,9 @@ class SyntacticAnalyzer(object):
         if self.peek().token_type == TokenType.IDENTIFIER and self.meta_peek().token_type == TokenType.ASSIGN:
             self.parse_assignment()
         else:
-            self.parse_condition()
-            self._append_instr(Instruction(InstrType.POP))
+            ty = self.parse_condition()
+            if ty != TypeDeduction.VOID:
+                self._append_instr(Instruction(InstrType.POP))
         self.asserted_get({TokenType.SEMICOLON})
         
     def parse_assignment(self):
@@ -498,7 +520,7 @@ class SyntacticAnalyzer(object):
             sign *= -1
         
         # if self.peek().token_type == TokenType.STR_LITERAL:
-            # raise SynExpressionErr('string literal cannot be calculated')           # todo:
+            # raise SynExpressionErr('string literal cannot be calculated')        # todo:
         
         if self.peek().token_type in {TokenType.UINT_LITERAL, TokenType.DBL_LITERAL, TokenType.STR_LITERAL}:
             lit = self.get()
@@ -533,11 +555,14 @@ class SyntacticAnalyzer(object):
             raise SynCallErr(f'function\'s name missing')
         
         func = self._symbols.asserted_get_func(func_name)
-        if func.return_val_ty != TypeDeduction.VOID:
+        if func.num_ret_vals:
             self._append_instr(Instruction(InstrType.STACKALLOC, 1))
         
         self.asserted_get({TokenType.L_PAREN})
-        param_types = self.parse_func_params()
+        if self.peek().token_type != TokenType.R_PAREN:
+            param_types = self.parse_func_params()
+        else:
+            param_types = []
         self._append_instr(Instruction(InstrType.CALLNAME, func.offset))
         if not all(at == pt for at, pt in zip(func.arg_types, param_types)):
             raise SynTypeErr(f'type mismatched in function call of "{func_name}"')
@@ -554,18 +579,3 @@ class SyntacticAnalyzer(object):
             _ = self.get()
             param_types.append(self.parse_summation())
         return param_types
-
-
-if __name__ == '_main_':
-    from pprint import pprint as pp
-    from lexical.tokenizer import LexicalTokenizer
-    
-    tk = LexicalTokenizer(
-        """
-        begin
-            var baad = 1;
-            print(baad);
-        end
-        """
-    ).parse_tokens()
-    pp([str(op) for op in SyntacticAnalyzer(tk).generate_instructions()])

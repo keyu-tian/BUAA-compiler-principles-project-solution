@@ -8,7 +8,8 @@ from functools import partial
 from meta import FS_ENCODING
 
 r_open = partial(open, mode='r', encoding=FS_ENCODING)
-wb_open = partial(open, mode='wb', encoding=FS_ENCODING)
+w_open = partial(open, mode='w', encoding=FS_ENCODING)
+wb_open = partial(open, mode='wb')
 
 
 def time_str(fs=False):

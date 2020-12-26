@@ -40,7 +40,7 @@ class LexicalTokenizer(object):
     
     """
     
-    def __init__(self, lg: Optional[logging.Logger], raw_input: str):
+    def __init__(self, lg: logging.Logger, raw_input: str):
         self.lg, self.raw_input = lg, raw_input
     
     def parse_tokens(self) -> Tuple[List[Token], List[str]]:
