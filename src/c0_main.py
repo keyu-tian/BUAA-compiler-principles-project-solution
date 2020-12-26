@@ -58,5 +58,4 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.argv[2] = '../tests/6-break-continue/ac3.input.txt'
     main()
