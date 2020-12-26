@@ -52,11 +52,12 @@ def main():
             lg.info(f'time cost: {dt:.2f}ms')
         except (TokenCompilationError, SyntacticCompilationError):
             traceback.print_exc()
-            print(f'cur = {" ".join([str(t.val) for t in s._tokens[s._tk_top:s._tk_top+10]])} ...')
+            print(f'@ {" ".join([str(t.val) for t in s._tokens[s._tk_top:s._tk_top+20]])} ...')
             exit(-1)
 
 
 if __name__ == '__main__':
     if LOCAL:
-        sys.argv[2] = '../tests/3-double/ac3-pi-and-e.input.txt'
+        k = '3-double/ac1-simulate-anneal'
+        sys.argv[2] = f'../tests/{k}.input.txt'
     main()

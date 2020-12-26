@@ -18,14 +18,24 @@ def dfs_scripts(cwd, upd_fn):
 
 if __name__ == '__main__':
     
-    cp = """
+    cp = """# Copyright (C) 2020, Keyu Tian, Beihang University.
+# This file is a part of my compiler assignment for Compilation Principles.
+# All rights reserved.
 """
+    target = cp + '\n'
     
     def upd(path):
         with open(path, 'r', encoding='utf-8') as fp:
             ctt = fp.read()
-        if not ctt.startswith(cp):
-            with open(path, 'w', encoding='utf-8') as fp:
-                fp.write(cp + ctt.replace(cp[:-1], ''))
+        
+        for wr in ['\n' + cp, cp + '\n\n', cp + '\n\n\n']:
+            if ctt.startswith(wr):
+                ctt = ctt.replace(wr, target)
+        
+        if not ctt.startswith(target):
+            ctt = target + ctt
+        
+        with open(path, 'w', encoding='utf-8') as fp:
+            fp.write(ctt)
     
     dfs_scripts(os.getcwd(), upd)

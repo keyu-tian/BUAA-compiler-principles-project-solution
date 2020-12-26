@@ -2,7 +2,6 @@
 # This file is a part of my compiler assignment for Compilation Principles.
 # All rights reserved.
 
-
 class SyntacticCompilationError(Exception):
     pass
 

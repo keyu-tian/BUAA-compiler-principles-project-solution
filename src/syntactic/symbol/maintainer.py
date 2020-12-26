@@ -4,8 +4,8 @@
 
 from typing import List
 
-from syntactic.symbol.ty import TypeDeduction
 from syntactic.symbol.table import _ScopeWiseSymbolTable, VarAttrs, FuncAttrs
+from syntactic.symbol.ty import TypeDeduction
 from syntactic.syn_err import SynReferenceErr
 from vm.instruction import Instruction
 
@@ -46,8 +46,10 @@ class SymbolMaintainer(object):
         return self._num_local_vars
     
     def declare_func(self, name: str, arg_types: List[TypeDeduction], num_local_vars: int, return_val_ty: TypeDeduction, instructions: List[Instruction]):
-        self._global_table[name] = FuncAttrs(self._global_symbol_cnt, name, arg_types, num_local_vars, return_val_ty, instructions)
+        func = FuncAttrs(self._global_symbol_cnt, name, arg_types, num_local_vars, return_val_ty, instructions)
+        self._global_table[name] = func
         self._global_symbol_cnt += 1   # indexing from 0
+        return func
 
     def declare_func_arg(self, name: str, is_int: bool, const: bool):
         self._local_tables[-1][name] = VarAttrs(self._num_ret_vals + self._num_func_args, is_global=False, is_arg=True, is_int=is_int, inited=True, const=const)
@@ -84,14 +86,14 @@ class SymbolMaintainer(object):
     #     return self._num_local_vars - 1        # returns the offset for generating LOAD instruction
     
     def asserted_get_var_or_arg(self, name):
-        return self._asserted_get_symbol(name, expect_func=False)[0]
+        return self._asserted_get_symbol(name, expect_func=False)
     
     def asserted_get_func(self, name):
-        return self._asserted_get_symbol(name, expect_func=True)[0]
+        return self._asserted_get_symbol(name, expect_func=True)
     
     def asserted_init_var(self, name) -> VarAttrs:
-        var, tbl = self._asserted_get_symbol(name, expect_func=False)
-        tbl.update({name: var.inited_replica})
+        var = self._asserted_get_symbol(name, expect_func=False)
+        var.inited = True
         return var
     
     def _asserted_get_symbol(self, name: str, expect_func: bool):
@@ -99,38 +101,8 @@ class SymbolMaintainer(object):
         for tbl in reversed([self._global_table] + self._local_tables):
             syb = tbl.get(name, None)
             if isinstance(syb, clz):
-                return syb, tbl
+                return syb
         raise SynReferenceErr(f'reference of undefined {hint} "{name}"')
     
     def __str__(self):
         return f'=> global:\n{self._global_table}\n=> locals:\n{chr(10).join(map(str, self._local_tables))}\n'
-
-
-if __name__ == '__main__':
-    sm = SymbolMaintainer()
-    sm.declare_func('f1', 1, 1, True, [])
-    sm.declare_global_var('g1', True, True, False)
-    
-    sm.enter_func('main')
-    sm.declare_local_var('m1', True, True, False)
-    
-    sm.enter_scope('if')
-    sm.declare_local_var('i1', True, True, False)
-    
-    sm.enter_scope('while')
-    sm.declare_local_var('w1', True, True, False)
-    sm.declare_local_var('w2', True, True, False)
-    sm.declare_local_var('w3', False, False, False)
-    sm.init_var('w3')
-    print('sm1', sm, sep='\n')
-    sm.exit_scope()
-    
-    sm.exit_scope()
-    
-    sm.declare_local_var('m2', True, True, False)
-    sm.declare_local_var('m3', True, True, False)
-    print('sm2', sm, sep='\n')
-    
-    sm.exit_func()
-    
-    print('sm3', sm, sep='\n')

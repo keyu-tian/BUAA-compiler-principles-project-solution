@@ -1,13 +1,13 @@
 # Copyright (C) 2020, Keyu Tian, Beihang University.
 # This file is a part of my compiler assignment for Compilation Principles.
 # All rights reserved.
-import logging
-from typing import List, Optional, Union
 
-from syntactic.symbol.table import VarAttrs, FuncAttrs
-from vm.instruction import Instruction
+import logging
+from typing import List, Union
 
 from obj.byte_casting import *
+from syntactic.symbol.table import VarAttrs, FuncAttrs
+from vm.instruction import Instruction
 
 
 class _VerboseBArr(bytearray):
@@ -108,7 +108,7 @@ class Assembler(object):
             [' func idx', ' num rets', ' num args', ' num loc vars']
         )]
         
-        self._barr.append(len(func.instructions), ' num instrs')
+        self._barr.extend(u32_to_bytes(len(func.instructions)), ' num instrs')
         [self._dump_an_instruction(i) for i in func.instructions]
         
     def _dump_an_instruction(self, instr: Instruction):

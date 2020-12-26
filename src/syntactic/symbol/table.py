@@ -2,43 +2,60 @@
 # This file is a part of my compiler assignment for Compilation Principles.
 # All rights reserved.
 
+from abc import ABCMeta, abstractmethod
 from pprint import pformat
-from typing import NamedTuple, Dict, List, Union
+from typing import Dict, List, Union
 
 from syntactic.symbol.ty import TypeDeduction
 from syntactic.syn_err import SynDeclarationErr
 from vm.instruction import Instruction
 
 
-class VarAttrs(NamedTuple):
-    offset: int
-    is_global: bool
-    is_arg: bool
-    is_int: bool
-    inited: bool
-    const: bool
+class Attrs(metaclass=ABCMeta):
+    def __init__(self, offset):
+        self.offset = offset
     
-    @staticmethod
-    def is_func(): return False
+    @abstractmethod
+    def is_func(self):
+        pass
+
+
+class VarAttrs(Attrs):
+    
+    def __init__(
+            self, offset: int,
+            is_global: bool, is_arg: bool,
+            is_int: bool, inited: bool, const: bool,
+    ):
+        super(VarAttrs, self).__init__(offset)
+        self.is_global, self.is_arg, self.is_int, self.inited, self.const = (
+            is_global, is_arg, is_int, inited, const
+        )
+    
+    def is_func(self):
+        return False
+
+
+class FuncAttrs(Attrs):
+    
+    def __init__(
+            self, offset: int,
+            name: str, arg_types: List[TypeDeduction],
+            num_local_vars: int, return_val_ty: TypeDeduction,
+            instructions: List[Instruction],
+    ):
+        super(FuncAttrs, self).__init__(offset)
+        self.name, self.arg_types, self.num_local_vars, self.return_val_ty, self.instructions = (
+            name, arg_types, num_local_vars, return_val_ty, instructions
+        )
+    
+    def is_func(self):
+        return True
     
     @property
-    def inited_replica(self): return self._replace(inited=True)
-
-
-class FuncAttrs(NamedTuple):
-    offset: int
-    name: str
-    arg_types: List[TypeDeduction]
-    num_local_vars: int
-    return_val_ty: TypeDeduction
-    instructions: List[Instruction]
+    def num_ret_vals(self):
+        return int(self.return_val_ty != TypeDeduction.VOID)
     
-    @staticmethod
-    def is_func(): return True
-
-    @property
-    def num_ret_vals(self): return int(self.return_val_ty != TypeDeduction.VOID)
-
     def __repr__(self):
         ins_s = '\t' + '\n\t'.join([
             f'{instr.ip}: {instr}'
@@ -65,4 +82,3 @@ class _ScopeWiseSymbolTable(Dict[str, Union[VarAttrs, FuncAttrs]]):
     
     def __str__(self):
         return f'scope-wise symbol table @{self.__name}:\n{pformat(self)}'
-

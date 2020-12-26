@@ -1,8 +1,8 @@
 # Copyright (C) 2020, Keyu Tian, Beihang University.
 # This file is a part of my compiler assignment for Compilation Principles.
 # All rights reserved.
+
 import logging
-from copy import deepcopy
 from functools import partial
 from typing import List, Optional, NamedTuple, Iterable, Dict
 
@@ -110,7 +110,6 @@ class SyntacticAnalyzer(object):
         .. note::
             func_decl -> 'fn' IDENT '(' func_args? ')' '->' TYPE block_stmt
         """
-        self._local_instr.clear()
         
         self.asserted_get({TokenType.FN_KW})
         ident = self.get()
@@ -131,6 +130,13 @@ class SyntacticAnalyzer(object):
         self._return_val_ty = TypeDeduction.from_token_type(ty.token_type)
         
         has_ret_val = self._return_val_ty != TypeDeduction.VOID
+        self._local_instr = []      # create a new list
+        func = self._symbols.declare_func(
+            name=name, arg_types=arg_types, num_local_vars=-1,
+            return_val_ty=self._return_val_ty,
+            instructions=self._local_instr
+        )
+        
         self._symbols.enter_func(f'func {name}', has_ret_val)
         [self._symbols.declare_func_arg(**kw) for kw in decl_kws]
         all_returned = self.parse_block_stmt(brk_ctn_instr=None, is_func=True)
@@ -142,11 +148,7 @@ class SyntacticAnalyzer(object):
                 self._append_instr(Instruction(InstrType.RET))
         
         num_local_vars = self._symbols.exit_func()
-        self._symbols.declare_func(
-            name=name, arg_types=arg_types, num_local_vars=num_local_vars,
-            return_val_ty=self._return_val_ty,
-            instructions=deepcopy(self._local_instr)
-        )
+        func.num_local_vars = num_local_vars
         
     def parse_func_args(self, decl_kws: List[Dict]) -> List[TypeDeduction]:
         """
