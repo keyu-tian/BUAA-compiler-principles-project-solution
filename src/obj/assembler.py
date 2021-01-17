@@ -54,7 +54,6 @@ class Assembler(object):
     def dump(self):
         if not self._dumped:
             self._dumped = True
-            self._dump_str_literals()
             self._dump_global_symbols()
             self._dump_functions()
         return self._barr
@@ -71,7 +70,8 @@ class Assembler(object):
             count: u32,
             items: global_symbol[],
         """
-        self._barr.extend(u32_to_bytes(len(self._global_symbols)), 'num globals')
+        self._barr.extend(u32_to_bytes(len(self._str_literals) + len(self._global_symbols)), 'num globals')
+        self._dump_str_literals()
         [self._dump_a_global_symbol(s) for s in self._global_symbols]
     
     def _dump_a_global_symbol(self, symbol: Union[VarAttrs, FuncAttrs]):
