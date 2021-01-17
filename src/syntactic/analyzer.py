@@ -54,7 +54,7 @@ class SyntacticAnalyzer(object):
             raise SynProgramErr(f'arguments found in the "main" func')
         
         if main.num_ret_vals:
-            self._global_instr.append(Instruction(InstrType.STACKALLOC))
+            self._global_instr.append(Instruction(InstrType.STACKALLOC, 1))
         self._global_instr.append(Instruction(InstrType.CALLNAME, main.offset))
         
     def analyze_tokens(self):

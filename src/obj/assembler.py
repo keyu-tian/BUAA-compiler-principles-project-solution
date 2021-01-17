@@ -84,9 +84,8 @@ class Assembler(object):
         """
         if symbol.is_func():
             self._barr.append(1, ' const')
-            name_b = str_to_bytes(symbol.name)
-            self._barr.extend(u32_to_bytes(len(name_b)), ' len(func name)')
-            self._barr.extend(name_b, ' func name str')
+            self._barr.extend(u32_to_bytes(len(symbol.name)), ' len(func name)')
+            self._barr.extend(str_to_bytes(symbol.name), ' func name str')
         else:
             self._barr.append(int(symbol.const), ' const')
             self._barr.extend(u32_to_bytes(8), ' num gvar btyes')

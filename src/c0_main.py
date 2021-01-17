@@ -58,6 +58,6 @@ def main():
 
 if __name__ == '__main__':
     if LOCAL:
-        k = '0-basic/ac2-1-christmas-tree'
+        k = '0-basic/ac4-fib'
         sys.argv[2] = f'../tests/{k}.input.txt'
     main()
