@@ -4,7 +4,7 @@
 
 from abc import ABCMeta, abstractmethod
 from pprint import pformat
-from typing import Dict, List, Union
+from typing import List, Union, OrderedDict
 
 from syntactic.symbol.ty import TypeDeduction
 from syntactic.syn_err import SynDeclarationErr
@@ -69,7 +69,7 @@ class FuncAttrs(Attrs):
         return f'fn {self.name} [{self.offset}] loc={self.num_local_vars}, args=[{args_s}] -> ret={self.return_val_ty} {{{ins_s}}}'
 
 
-class _ScopeWiseSymbolTable(Dict[str, Union[VarAttrs, FuncAttrs]]):
+class _ScopeWiseSymbolTable(OrderedDict[str, Union[VarAttrs, FuncAttrs]]):
     
     def __init__(self, name):
         super(_ScopeWiseSymbolTable, self).__init__()
