@@ -21,7 +21,10 @@ class _VerboseBArr(bytearray):
 
     def extend(self, byts, hint: str) -> None:
         super(_VerboseBArr, self).extend(byts)
-        s = ' '.join(f'{x:02x}' for x in byts)
+        if hint.endswith('str'):
+            s = ' '.join(f' {chr(x)}' for x in byts)
+        else:
+            s = ' '.join(f'{x:02x}' for x in byts)
         self.hints.append(f'{hint:17s}: {s}')
     
     # def join(self, __iterable_of_bytes, hint: str):
@@ -51,9 +54,16 @@ class Assembler(object):
     def dump(self):
         if not self._dumped:
             self._dumped = True
+            self._dump_str_literals()
             self._dump_global_symbols()
             self._dump_functions()
         return self._barr
+    
+    def _dump_str_literals(self):
+        for s in self._str_literals:
+            self._barr.append(1, ' const')
+            self._barr.extend(u32_to_bytes(len(s)), ' len(str ltr)')
+            self._barr.extend(str_to_bytes(s), ' str')
     
     def _dump_global_symbols(self):
         """
@@ -76,7 +86,7 @@ class Assembler(object):
             self._barr.append(1, ' const')
             name_b = str_to_bytes(symbol.name)
             self._barr.extend(u32_to_bytes(len(name_b)), ' len(func name)')
-            self._barr.extend(name_b, ' func name')
+            self._barr.extend(name_b, ' func name str')
         else:
             self._barr.append(int(symbol.const), ' const')
             self._barr.extend(u32_to_bytes(8), ' num gvar btyes')
