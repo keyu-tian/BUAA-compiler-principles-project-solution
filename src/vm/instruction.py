@@ -83,10 +83,13 @@ class Instruction(object):
     
     def __init__(self, instr_type: InstrType, operand: Union[int, float] = None):
         self.instr_type, self.operand = instr_type, operand
-        self.op_is_int = isinstance(self.operand, int)
         self.operand_signed = self.instr_type in _operand_signed_instr_types
         self.operand_32bits = self.instr_type not in _operand_64bits_instr_types
         self.ip = 0
+    
+    @property
+    def op_is_int(self):
+        return isinstance(self.operand, int)
     
     def __repr__(self):
         ty_str = 'ui'[self.operand_signed] + ['64', '32'][self.operand_32bits]
